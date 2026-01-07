@@ -26,7 +26,7 @@ The **MODE** global variable is set to either `SILENT` (Targeted DNS spoofing (S
 
     *** router.lan can't find www.fakelogin.net: Non-existent domain 
     ```
-2. On the attacker device, the attack is run with: `sudo python3 mitm_spoofer.py`
+2. On the attacker device, the attack is run with: `sudo python3 mitm_spoofer.py --mode SILENT --target [victim_ip]`
     Program output:
     ```
     [*] Starting MITM Attack on Victim: 192.168.88.227
