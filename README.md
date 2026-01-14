@@ -61,7 +61,7 @@ When victim visits HTTP websites:
 - All POST data (including credentials) is intercepted and logged
 
 ### 4. Phishing Server (Optional)
-A separate fake login page that captures credentials when victims enter them.
+A separate fake login page.
 
 ## Usage
 
