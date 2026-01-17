@@ -1,8 +1,6 @@
 # 2IC80 Final Project - Group 28
 By Sotiris Charalampopoulos (1785117), Nanda Potters (1983881), and Stefan Birca (1924818).
 
-The current version is for the final deliverable.
-
 This project implements a Man-in-the-Middle (MITM) attack tool combining ARP Poisoning, DNS Spoofing, and SSL Stripping capabilities for analyzing the feasibility of SSL stripping attacks in modern networks.
 
 ## Project Structure
