@@ -97,7 +97,6 @@ sudo python3 mitm_spoofer.py --mode ALL_OUT --target 192.168.178.111 --server 19
 ### Setup
 1. **Attacker machine:** Your laptop/computer running the attack tool
 2. **Victim machine:** A separate device (VM, phone, or another computer) on the same network
-3. **Disable DNS-over-HTTPS on victim's browser** (Firefox: `about:config` → `network.trr.mode` → `5`)
 
 ### Test 1: SSL Stripping on HTTP Sites
 
@@ -146,7 +145,7 @@ sudo python3 mitm_spoofer.py --mode ALL_OUT --target 192.168.178.111
 ### Test 2: HTTP→HTTPS Bridge Detection
 
 **On Victim Device:**
-1. Navigate to: `http://tui.com`
+1. Navigate to: `tui.com`
 2. Page loads (possibly distorted due to failed subresources)
 
 **Attacker Terminal Output:**
@@ -171,7 +170,7 @@ This shows the "t0 moment" - the HTTP→HTTPS bridge where SSL stripping interce
 ### Test 3: HSTS Preload Protection
 
 **On Victim Device:**
-1. Navigate to: `https://google.com`
+1. Navigate to: `google.com`
 
 **Attacker Terminal Output:**
 ```
